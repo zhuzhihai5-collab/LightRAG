@@ -1,3 +1,57 @@
+# LightRAG 复杂问题知识助手
+
+基于 [HKUDS/LightRAG](https://github.com/HKUDS/LightRAG) 的问答扩展，面向需要比较多个对象、保留条件或跨文档核对证据的问题。每个阶段都会写出可单独检查的 JSON，便于回溯拆解、召回和回答的结果。
+
+| 阶段 | 输出 |
+| --- | --- |
+| 问题拆解 | 简单问题沿用原问，复杂问题拆成 2–4 个可独立查证的子问题 |
+| 检索证据 | 按子问题查询 LightRAG，合并重复片段并保留来源和块 ID |
+| 证据判断 | 记录每题证据充分性与缺失信息，可针对缺口补检索一次 |
+| 生成回答 | 逐题生成答案并校验引用，可回答的部分与缺失信息一并输出 |
+
+## 快速体验
+
+需要 Python 3.10 或更新版本。在仓库根目录运行。以下示例使用 PowerShell，macOS 和 Linux 将 `.\.venv\Scripts\python.exe` 换成 `./.venv/bin/python`。
+
+```powershell
+git clone https://github.com/zhuzhihai5-collab/LightRAG.git
+cd LightRAG
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e . openai
+.\.venv\Scripts\python.exe -m complex_qa --demo
+.\.venv\Scripts\python.exe -m unittest discover -s tests/complex_qa -v
+```
+
+`--demo` 展示固定的拆解结果。离线测试使用注入的测试模型验证拆解边界、证据检索和引用校验。
+
+## 用真实模型运行
+
+1. 将 [实验配置模板](.env.smoke.example) 复制为 `.env.smoke`，填写兼容 OpenAI 的聊天及 Embedding 参数。聊天服务需支持 `response_format=json_object`。
+2. 先运行基线脚本，用内置样例构建索引。脚本将 `naive` 的向量检索与 `mix` 的图谱加向量检索放在相同 Top-K 下比较，报告写入 `baseline/results/`。
+3. 用同一个索引依次运行问题拆解、证据检索、回答生成。
+
+```powershell
+Copy-Item .env.smoke.example .env.smoke
+# 先填写 .env.smoke
+.\.venv\Scripts\python.exe baseline_compare.py --modes naive,mix --top-k 3 --chunk-top-k 3
+.\.venv\Scripts\python.exe -m complex_qa "星链X2 和蓝鲸Y1 分别支持断网运行吗？" --output output/plan.json
+.\.venv\Scripts\python.exe -m complex_qa.retrieval output/plan.json --mode naive --output output/evidence.json
+.\.venv\Scripts\python.exe -m complex_qa.answer output/evidence.json --supplement --output output/answer.json
+```
+
+## 使用技巧
+
+- 换用 `--mode mix`，对照不同检索方式召回的原文和来源。比较检索方式时保持同一语料、模型和 Top-K。
+- 可用 `--max-subquestions 2` 控制拆解规模。先检查每个子问题是否保留了原问题中的对象、时间和限制条件。
+- 加 `--supplement` 后，每个符合条件的证据缺口最多补检索一次。先从输出中的证据状态、引用块和缺失信息判断回答覆盖范围。
+- 输出文件要求使用新路径。切换 Embedding 模型时，用基线脚本的 `--reset` 重建本地基线索引。真实模型调用由服务商计费。
+
+[扩展模块说明](complex_qa/README.md) · [离线测试](tests/complex_qa) · [样例语料](baseline/cases.json) · [上游中文文档](README-zh.md) · [MIT 许可证](LICENSE)
+
+---
+
+## 上游 LightRAG 文档
+
 <div align="center">
 
 <div style="margin: 20px 0;">
@@ -34,8 +88,6 @@
     <p>
       <a href="README-zh.md"><img src="https://img.shields.io/badge/🇨🇳中文版-1a1a2e?style=for-the-badge"></a>
       <a href="README.md"><img src="https://img.shields.io/badge/🇺🇸English-1a1a2e?style=for-the-badge"></a>
-      <a href="README-ja.md"><img src="https://img.shields.io/badge/🇯🇵日本語版-1a1a2e?style=for-the-badge"></a>
-      <a href="README-id.md"><img src="https://img.shields.io/badge/🇮🇩Bahasa%20Indonesia-1a1a2e?style=for-the-badge"></a>
     </p>
     <p>
       <a href="https://pepy.tech/projects/lightrag-hku"><img src="https://static.pepy.tech/personalized-badge/lightrag-hku?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads"></a>
